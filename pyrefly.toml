@@ -1,0 +1,7 @@
+project-includes = [
+    "backend/**/*.py",
+    "vulnerable-api/**/*.py",
+]
+
+[errors]
+missing-import = "ignore"

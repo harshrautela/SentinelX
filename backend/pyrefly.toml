@@ -1,0 +1,5 @@
+project-includes = [
+    "app/**/*.py",
+    "tests/**/*.py",
+]
+search-path = ["."]

@@ -1,0 +1,87 @@
+version: '3.8'
+
+# ============================================
+# SentinelX — Docker Compose
+# ============================================
+# Usage:
+#   docker compose up --build
+#   docker compose up -d
+#   docker compose down
+# ============================================
+
+services:
+  # -----------------------------------------------
+  # VulnBank API — Deliberately Vulnerable Target
+  # ⚠️  FOR AUTHORIZED LOCAL TESTING ONLY
+  # -----------------------------------------------
+  vulnerable-api:
+    build: ./vulnerable-api
+    container_name: vulnbank-api
+    ports:
+      - "8001:8000"
+    environment:
+      - VULNBANK_SECURE_MODE=${VULNBANK_SECURE_MODE:-false}
+    volumes:
+      - vulnbank-data:/app/data
+    networks:
+      - sentinelx-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # -----------------------------------------------
+  # SentinelX Backend — VAPT Engine + REST API
+  # -----------------------------------------------
+  sentinelx-backend:
+    build: ./backend
+    container_name: sentinelx-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/sentinelx.db
+      - ALLOWED_TARGETS=vulnerable-api,localhost,127.0.0.1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_REQUESTS_PER_SCAN=${MAX_REQUESTS_PER_SCAN:-1000}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-10.0}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    volumes:
+      - sentinelx-data:/app/data
+    depends_on:
+      vulnerable-api:
+        condition: service_healthy
+    networks:
+      - sentinelx-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # -----------------------------------------------
+  # SentinelX Frontend — React Dashboard
+  # -----------------------------------------------
+  sentinelx-frontend:
+    build: ./frontend
+    container_name: sentinelx-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      sentinelx-backend:
+        condition: service_healthy
+    networks:
+      - sentinelx-net
+    restart: unless-stopped
+
+volumes:
+  vulnbank-data:
+  sentinelx-data:
+
+networks:
+  sentinelx-net:
+    driver: bridge
